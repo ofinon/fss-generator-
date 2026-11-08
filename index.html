@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>FSS Generator</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FSS Generator">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1d3f8f">
+<style>
+/* Layout: two-pane flight bag — saisie à gauche, feuille officielle en aperçu à droite (empilé sur téléphone) */
+:root{
+  --bg:#e9edf2; --panel:#ffffff; --ink:#142030; --muted:#5a6779; --line:#d3dae3;
+  --accent:#1d4ea6; --accent-soft:#e3ebf8; --ok:#1d7a45; --ok-soft:#e1f2e8;
+  --warn:#a86512; --warn-soft:#fbefdc; --bad:#b42318; --bad-soft:#fbe4e1;
+  --sheet:#fbfbf9;
+  --f-display:"Avenir Next Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f151d; --panel:#17202b; --ink:#e4e9f0; --muted:#94a1b2; --line:#2a3644;
+  --accent:#7ea6ec; --accent-soft:#1c2c45; --ok:#5cc58a; --ok-soft:#143022;
+  --warn:#e3a54f; --warn-soft:#352612; --bad:#f07a6e; --bad-soft:#3a1915; --sheet:#d9dbd6; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f151d; --panel:#17202b; --ink:#e4e9f0; --muted:#94a1b2; --line:#2a3644;
+  --accent:#7ea6ec; --accent-soft:#1c2c45; --ok:#5cc58a; --ok-soft:#143022;
+  --warn:#e3a54f; --warn-soft:#352612; --bad:#f07a6e; --bad-soft:#3a1915; --sheet:#d9dbd6; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.4}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px;max-width:1500px;margin:0 auto}
+header.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+header.top h1{font-family:var(--f-display);font-weight:700;font-size:28px;letter-spacing:.02em;margin:0;text-wrap:balance}
+header.top h1 small{display:block;font-family:var(--f-body);font-weight:500;font-size:13px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px;font-weight:600}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--panel)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+@media (min-width:1100px){.grid{grid-template-columns:minmax(0,600px) minmax(0,1fr)}.preview{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto}}
+section.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.form{display:flex;flex-direction:column;gap:16px;min-width:0}
+h2{font-family:var(--f-display);font-weight:600;font-size:19px;letter-spacing:.06em;text-transform:uppercase;margin:0;display:flex;align-items:center;gap:10px}
+h2 .n{font-family:var(--f-mono);font-size:12px;color:var(--accent);background:var(--accent-soft);border-radius:4px;padding:1px 6px;letter-spacing:0}
+.row{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+label.f{display:flex;flex-direction:column;justify-content:flex-end;gap:4px;font-size:12px;color:var(--muted);font-weight:500;letter-spacing:.03em;min-width:0}
+input,select,textarea{font:inherit;font-size:15px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 9px;width:100%;min-width:0}
+input.num{font-family:var(--f-mono);font-size:14px}
+textarea{font-family:var(--f-mono);font-size:13px;resize:vertical;min-height:62px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:14px;cursor:pointer;user-select:none;background:var(--bg)}
+.chip input{width:auto;margin:0;accent-color:var(--accent)}
+.chip:has(input:checked){background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.hint a{color:var(--accent)}
+.sub{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:4px 0 -4px}
+.pills{display:flex;flex-wrap:wrap;gap:8px}
+.pill{font-size:13px;font-weight:600;border-radius:6px;padding:4px 10px;font-family:var(--f-mono)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)} .pill.neu{background:var(--accent-soft);color:var(--accent)}
+.tbl-wrap{overflow-x:auto}
+table.wb{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+table.wb th,table.wb td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+table.wb th:first-child,table.wb td:first-child{text-align:left;white-space:normal}
+table.wb th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+table.wb td{font-family:var(--f-mono);font-size:13px}
+table.wb td:first-child{font-family:var(--f-body);font-size:13.5px}
+table.wb tr.tot td{font-weight:600;background:var(--accent-soft)}
+.env{width:100%;max-width:100%;height:auto;display:block}
+.pax{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.dest{display:grid;grid-template-columns:22px minmax(0,1fr) 92px;gap:8px;align-items:center}
+.dest span{font-family:var(--f-mono);font-size:12px;color:var(--muted)}
+.preview{min-width:0;display:flex;flex-direction:column;gap:14px}
+.preview .ph{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.preview .ph b{font-family:var(--f-display);font-size:18px;letter-spacing:.06em;text-transform:uppercase}
+.sheet{flex-shrink:0;background:var(--sheet);border-radius:4px;box-shadow:0 1px 3px rgba(0,0,0,.18),0 8px 24px rgba(0,0,0,.08);overflow:hidden}
+.sheet svg{display:block;width:100%;height:auto}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--panel);padding:10px 16px;border-radius:8px;font-weight:500;max-width:calc(100% - 32px);z-index:20}
+details.fleet summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(--accent)}
+.fleet-row{display:grid;grid-template-columns:1.2fr .8fr 1fr 1fr 32px;gap:6px;margin-top:6px}
+.fleet-row button{padding:4px}
+.calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px}
+.calc div{background:var(--bg);border-radius:8px;padding:8px 10px}
+.calc small{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.calc strong{font-family:var(--f-mono);font-size:16px}
+.calc .ok strong{color:var(--ok)} .calc .bad strong{color:var(--bad)} .calc .warn strong{color:var(--warn)}
+#color{font-weight:700;border-left-width:6px}
+#color[data-c="GREEN"]{color:var(--ok);border-color:var(--ok);background:var(--ok-soft)}
+#color[data-c="BLUE"]{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+#color[data-c="YELLOW"]{color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+#color[data-c="RED"]{color:var(--bad);border-color:var(--bad);background:var(--bad-soft)}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{width:48px;height:48px;flex-shrink:0;filter:drop-shadow(0 2px 4px rgba(20,32,48,.25))}
+@media (prefers-reduced-motion:no-preference){.chip,button{transition:background .12s,border-color .12s}}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);font-size:15px}
+[hidden]{display:none!important}
+.tpl{border-color:var(--warn);background:var(--warn-soft)}
+.tpl.ok{border-color:var(--line);background:var(--panel)}
+.file{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.file input{position:absolute;opacity:0;width:1px;height:1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+  <div class="brand">
+  <svg class="logo" viewBox="0 0 48 48" role="img" aria-label="Logo FSS Generator">
+    <rect width="48" height="48" rx="11" fill="#1d3f8f"/>
+    <rect x="9" y="7.5" width="30" height="36" rx="3" fill="#c58b3c"/>
+    <rect x="11.5" y="12" width="25" height="29" rx="1" fill="#ffffff"/>
+    <rect x="18" y="5" width="12" height="6.5" rx="2" fill="#d5dce5" stroke="#7f8b9b" stroke-width=".8"/>
+    <circle cx="24" cy="7.4" r="1.1" fill="#7f8b9b"/>
+    <g fill="#1d3f8f" stroke="#1d3f8f" stroke-linecap="round">
+      <path d="M13.6 26.8 Q13.6 25.6 15.4 25.4 L18.6 25 L20 23.3 L26.6 23.3 L32 24.8 L32.2 20.6 L34 20.6 L34.2 26.2 L27.6 27 L19.2 28.2 L15.4 28.4 Q13.6 28.2 13.6 26.8 Z" stroke-width=".5" stroke-linejoin="round"/>
+      <path d="M17.6 22.9 H28.6" stroke-width="1.6" fill="none"/>
+      <path d="M21 27.9 L24.6 23.3 M15.6 28.3 V30.4 M22.4 28 L23.4 30.4" stroke-width=".8" fill="none"/>
+      <path d="M13 24.4 V29.4" stroke-width=".9" fill="none"/>
+      <circle cx="15.6" cy="31" r=".95" stroke="none"/>
+      <circle cx="23.5" cy="31" r="1.05" stroke="none"/>
+    </g>
+    <path d="M20.6 24.3 H23.8 V25.6 H20.1 Z" fill="#9cc3f0"/>
+    <path d="M14.5 35 H26 M14.5 38 H23" stroke="#b8c2cf" stroke-width="1.2" stroke-linecap="round"/>
+    <path d="M28.4 36.4 L30.4 38.4 L34 33.8" fill="none" stroke="#1d7a45" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <h1><small>Select Aviation · Feuille de suivi de vol</small>FSS Generator</h1>
+  </div>
+  <div class="actions">
+    <button id="btnNew" type="button">Nouveau vol</button>
+    <button id="btnPdf" class="primary" type="button">Créer le PDF</button>
+  </div>
+</header>
+
+<div class="grid">
+<div class="form">
+<section class="card tpl" id="tplCard">
+  <h2><span class="n">00</span>Modèle signé</h2>
+  <p class="hint" id="tplMsg">Importe ton formulaire vierge signé (PDF). Il reste sur cet appareil et n'est jamais envoyé en ligne.</p>
+  <div class="actions"><label class="file"><input type="file" id="tplFile" accept="application/pdf,.pdf"><span class="btnlike" style="border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-weight:600;background:var(--panel)" id="tplBtn">Importer le modèle</span></label></div>
+</section>
+
+<section class="card">
+  <h2><span class="n">01</span>Vol</h2>
+  <div class="row">
+    <label class="f">Date<input id="date" data-k="date" type="date"></label>
+    <label class="f">Retour<input id="ret" data-k="ret" type="date"></label>
+    <label class="f">Code couleur<select id="color" data-k="color"><option value="">—</option><option value="GREEN">GREEN</option><option value="BLUE">BLUE</option><option value="YELLOW">YELLOW</option><option value="RED">RED</option></select></label>
+  </div>
+  <p class="sub">Avion</p>
+  <div class="row">
+    <label class="f">Immatriculation<input id="reg" data-k="reg" list="fleetList" autocomplete="off" style="text-transform:uppercase"></label>
+    <label class="f">Type<select id="acType" data-k="acType"><option value="C150">C150</option><option value="C172">C172</option></select></label>
+    <label class="f">Masse à vide (lb)<input id="ew" data-k="ew" class="num" inputmode="decimal"></label>
+    <label class="f">Bras (in)<input id="arm" data-k="arm" class="num" inputmode="decimal"></label>
+  </div>
+  <datalist id="fleetList"></datalist>
+  <p class="hint">Les avions déjà saisis sont mémorisés : retape l'immatriculation pour retrouver sa masse à vide et son bras.</p>
+  <div class="chips" role="radiogroup" aria-label="Type de vol">
+    <label class="chip"><input type="radio" name="ftype" value="dual" data-k="ftype">Dual</label>
+    <label class="chip"><input type="radio" name="ftype" value="solo" data-k="ftype">Solo</label>
+    <label class="chip"><input type="radio" name="ftype" value="test" data-k="ftype">Test en vol</label>
+  </div>
+  <div class="chips">
+    <label class="chip"><input type="checkbox" id="cLocal" data-k="cLocal">Local</label>
+    <label class="chip"><input type="checkbox" id="cCirc" data-k="cCirc">Circuits</label>
+    <label class="chip"><input type="checkbox" id="cFirst" data-k="cFirst">1er solo</label>
+    <label class="chip"><input type="checkbox" id="cNav" data-k="cNav">Navigation / X-Country</label>
+    <label class="chip"><input type="checkbox" id="cIfr" data-k="cIfr">IFR</label>
+    <label class="chip"><input type="checkbox" id="cOther" data-k="cOther">Autre</label>
+  </div>
+  <div class="row">
+    <label class="f">Zone (local)<input id="zone" data-k="zone"></label>
+    <label class="f">Autre (préciser)<input id="other" data-k="other"></label>
+  </div>
+  <div class="row">
+    <label class="f">Code de la leçon / exercice<input id="lesson" data-k="lesson" placeholder="TB-S2-SF2 - Kingston"></label>
+    <label class="f">Date du dernier vol<input id="lastFlight" data-k="lastFlight" type="date"></label>
+  </div>
+  <div class="row">
+    <label class="f">Instructeur<input id="instructor" data-k="instructor" list="instrList" autocomplete="off"></label>
+  </div>
+  <datalist id="instrList"></datalist>
+</section>
+
+<section class="card">
+  <h2><span class="n">02</span>Route</h2>
+  <div id="dests" style="display:flex;flex-direction:column;gap:8px"></div>
+  <div class="row">
+    <label class="f">Temps de vol total estimé<input id="ttime" data-k="ttime" placeholder="2h15"></label>
+    <label class="f">ETA retour<input id="tEta" data-k="tEta" placeholder="11h45"></label>
+  </div>
+  <p class="sub">Checklist</p>
+  <div class="chips">
+    <label class="chip"><input type="checkbox" id="kDoc" data-k="kDoc">Documents</label>
+    <label class="chip"><input type="checkbox" id="kWx" data-k="kWx">Météo et NOTAM</label>
+    <label class="chip"><input type="checkbox" id="kWb" data-k="kWb">Masse et centrage</label>
+    <label class="chip"><input type="checkbox" id="kNav" data-k="kNav">Navigation / x-country ✓</label>
+    <label class="chip"><input type="checkbox" id="kNavNA" data-k="kNavNA">Navigation N/A</label>
+    <label class="chip"><input type="checkbox" id="kFp" data-k="kFp">Plan de vol déposé ✓</label>
+    <label class="chip"><input type="checkbox" id="kFpNA" data-k="kFpNA">Plan de vol N/A</label>
+  </div>
+  <p class="sub">Passagers</p>
+  <div id="paxList" style="display:flex;flex-direction:column;gap:8px"></div>
+</section>
+
+<section class="card">
+  <h2><span class="n">03</span>Météo</h2>
+  <div class="row">
+    <label class="f">Aéroport (OACI)<input id="wxStn" data-k="wxStn" placeholder="CYND" style="text-transform:uppercase"></label>
+    <label class="f">Élévation (ft)<input id="elev" data-k="elev" class="num" inputmode="numeric"></label>
+    <label class="f">Correction vent vrai → magnétique (°)<input id="decl" data-k="decl" class="num" inputmode="decimal"></label>
+  </div>
+  <label class="f">METAR brut (copié de NAV CANADA ou aviationweather.gov)
+    <textarea id="metar" data-k="metar" placeholder="METAR CYND 041200Z 00000KT 15SM FEW070 SCT140 BKN260 04/03 A3000"></textarea>
+  </label>
+  <p class="hint" id="wxLinks"></p>
+  <div class="row">
+    <label class="f">METAR de / heure<input id="wFrom" data-k="wFrom"></label>
+    <label class="f">Vent dir (°V)<input id="wDir" data-k="wDir" class="num"></label>
+    <label class="f">Vitesse (kt)<input id="wSpd" data-k="wSpd" class="num"></label>
+    <label class="f">Rafales (kt)<input id="wGst" data-k="wGst" class="num"></label>
+  </div>
+  <div class="row">
+    <label class="f">Plafond / visibilité<input id="wCld" data-k="wCld"></label>
+  </div>
+  <div class="row">
+    <label class="f">Temp (°C)<input id="wT" data-k="wT" class="num"></label>
+    <label class="f">Point de rosée<input id="wTd" data-k="wTd" class="num"></label>
+    <label class="f">Baro (inHg)<input id="wAlt" data-k="wAlt" class="num"></label>
+  </div>
+  <div class="row">
+    <label class="f">Piste<input id="rwy" data-k="rwy" class="num" placeholder="27"></label>
+    <label class="f">État de piste<select id="rwyCond" data-k="rwyCond"><option>DRY</option><option>WET</option><option>SNOW</option><option>ICE</option><option>SLUSH</option></select></label>
+    <label class="f">Limites HW / XW (kt)<input id="lims" data-k="lims" class="num" placeholder="25/13"></label>
+  </div>
+  <div class="calc" id="wxCalc"></div>
+</section>
+
+<section class="card">
+  <h2><span class="n">04</span>Masse et centrage</h2>
+  <div class="row">
+    <label class="f">Siège avant gauche (lb)<input id="wPil" data-k="wPil" class="num" inputmode="decimal"></label>
+    <label class="f">Siège avant droit (lb)<input id="wFr" data-k="wFr" class="num" inputmode="decimal"></label>
+    <label class="f" id="lbB1">Pax arrière / bagages 1 (lb)<input id="wB1" data-k="wB1" class="num" inputmode="decimal"></label>
+    <label class="f" id="lbB2">Bagages zone 2 (lb)<input id="wB2" data-k="wB2" class="num" inputmode="decimal"></label>
+  </div>
+  <div class="row">
+    <label class="f">Carburant à bord (gal US)<input id="fuelGal" data-k="fuelGal" class="num" inputmode="decimal"></label>
+    <label class="f">Temps de vol prévu (h)<input id="fTime" data-k="fTime" class="num" inputmode="decimal"></label>
+    <label class="f">Conso (gal/h)<input id="gph" data-k="gph" class="num" inputmode="decimal"></label>
+  </div>
+  <div class="tbl-wrap"><table class="wb" id="wbTable"></table></div>
+  <div class="pills" id="wbPills"></div>
+  <svg class="env" id="envSvg" viewBox="0 0 520 260" role="img" aria-label="Enveloppe de centrage"></svg>
+</section>
+
+<section class="card">
+  <h2><span class="n">05</span>Performances</h2>
+  <p class="hint">Saisie manuelle pour l'instant. Le calcul automatique viendra de ton Excel de performances.</p>
+  <p class="sub">1re étape</p>
+  <div class="row">
+    <label class="f">Décollage roulage (ft)<input id="p1TOr" data-k="p1TOr" class="num"></label>
+    <label class="f">Décollage total (ft)<input id="p1TOt" data-k="p1TOt" class="num"></label>
+    <label class="f">Atterrissage roulage (ft)<input id="p1LDr" data-k="p1LDr" class="num"></label>
+    <label class="f">Atterrissage total (ft)<input id="p1LDt" data-k="p1LDt" class="num"></label>
+  </div>
+  <div class="row">
+    <label class="f">Rayon d'action max (NM)<input id="p1Rng" data-k="p1Rng" class="num"></label>
+    <label class="f">Autonomie max (h)<input id="p1End" data-k="p1End" class="num"></label>
+  </div>
+  <p class="sub">2e étape</p>
+  <div class="row">
+    <label class="f">Décollage roulage (ft)<input id="p2TOr" data-k="p2TOr" class="num"></label>
+    <label class="f">Décollage total (ft)<input id="p2TOt" data-k="p2TOt" class="num"></label>
+    <label class="f">Atterrissage roulage (ft)<input id="p2LDr" data-k="p2LDr" class="num"></label>
+    <label class="f">Atterrissage total (ft)<input id="p2LDt" data-k="p2LDt" class="num"></label>
+  </div>
+  <div class="row">
+    <label class="f">Rayon d'action max (NM)<input id="p2Rng" data-k="p2Rng" class="num"></label>
+    <label class="f">Autonomie max (h)<input id="p2End" data-k="p2End" class="num"></label>
+  </div>
+</section>
+
+</div>
+
+<aside class="preview" aria-label="Aperçu de la feuille">
+  <div class="ph"><b>Aperçu</b><span class="hint">Signature et noms imprimés viennent de ton modèle</span></div>
+  <div class="sheet"><svg id="pg1" viewBox="0 0 612 792"></svg></div>
+  <div class="sheet"><svg id="pg2" viewBox="0 0 612 792"></svg></div>
+</aside>
+</div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script src="pdf-lib.min.js"></script>
+<script>
+"use strict";
+/* ---------- Données avion (matrice W&B + POH) ---------- */
+const TYPES={
+  C150:{label:"C150",front:39,b1:64,b2:84,fuel:42.2,mtow:1600,gph:5,b1Label:"Bagages zone 1 / pax arrière",
+    fwd:w=>w<=1280?31.5:31.5+(w-1280)*(32.9-31.5)/(1600-1280),aft:()=>37.5,minW:1100,
+    env:[[1100,34.65],[1280,40.32],[1600,52.64],[1600,60],[1100,41.25]]},
+  C172:{label:"C172",front:37,b1:73,b2:95,fuel:48,mtow:2300,gph:7.5,b1Label:"Pax arrière",
+    fwd:w=>w<=1950?35:35+(w-1950)*(38.5-35)/(2300-1950),aft:()=>47.3,minW:1500,utilMtow:2000,utilAft:40.5,
+    env:[[1500,52.5],[1950,68.25],[2300,88.55],[2300,108.79],[1500,70.95]]}
+};
+const DEFAULT_FLEET=[
+  {reg:"C-GUDB",type:"C150",ew:1138.85,arm:32.33},
+  {reg:"C-????",type:"C172",ew:1490,arm:40.43}
+];
+const ELEV={CYND:211,CYOW:374,CYGK:305,CYHU:90,CYUL:118,CYMX:271,CYQB:244,CYTR:283,CYRO:248,CYYZ:569};
+/* Calibrage des graphiques imprimés (points PDF) */
+const CHART={
+  C172:{X:m=>(138+(m-45)*6.723)/2,Y:w=>(642-(w-1500)*0.32875)/2,left:69,bottom:321,wMin:1500,wMax:2300,mMin:45,mMax:112},
+  C150:{X:m=>(756+(m-35)*12.95)/2,Y:w=>(659-(w-1100)*0.568)/2,left:345.6,bottom:329.5,wMin:1100,wMax:1600,mMin:30,mMax:62}
+};
+
+/* ---------- État ---------- */
+const LS="ffs-state-v2", LSF="ffs-fleet-v2";
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+function blankState(keep){
+  return Object.assign({date:today(),ret:today(),reg:"C-GUDB",acType:"C150",ew:"1138.85",arm:"32.33",color:"",instructor:"",kDoc:true,kWx:true,kWb:true,ftype:"solo",cLocal:false,cCirc:false,cFirst:false,cNav:false,cIfr:false,cOther:false,
+    zone:"",other:"",lesson:"",lastFlight:"",dests:[["",""],["",""],["",""],["",""],["",""]],ttime:"",tEta:"",kNav:false,kNavNA:false,kFp:false,kFpNA:true,
+    pax:[["","",""],["","",""],["","",""]],wxStn:"CYND",elev:"211",decl:"10",metar:"",wFrom:"",wDir:"",wSpd:"",wGst:"",wCld:"",wT:"",wTd:"",wAlt:"",rwy:"",rwyCond:"DRY",lims:"25/13",
+    wPil:"165",wFr:"0",wB1:"0",wB2:"10",fuelGal:"22.5",fTime:"1.5",gph:"",
+    p1TOr:"",p1TOt:"",p1LDr:"",p1LDt:"",p1Rng:"",p1End:"",p2TOr:"",p2TOt:"",p2LDr:"",p2LDt:"",p2Rng:"",p2End:""},keep||{});
+}
+const SAMPLE={reg:"C-GUDB",color:"BLUE",date:"2026-11-04",ret:"2026-11-04",ftype:"solo",cNav:true,kNav:true,kFpNA:true,lesson:"TB-S2-SF2 - Kingston",lastFlight:"2026-10-22",
+  dests:[["CYGK","9h45"],["",""],["",""],["",""],["",""]],ttime:"4h15",tEta:"11h45",
+  metar:"METAR CYND 041200Z 00000KT 15SM FEW070 SCT140 BKN260 04/03 A3000",rwy:"27",
+  wPil:"165",wFr:"0",wB1:"0",wB2:"10",fuelGal:"22.5",fTime:"",gph:"",usedOverride:"85",
+  p1TOr:"743",p1TOt:"1395",p1LDr:"390",p1LDt:"1080",p1Rng:"340",p1End:"3.6"};
+let S, FLEET;
+function load(){
+  try{S=JSON.parse(localStorage.getItem(LS)||"null")}catch(e){S=null}
+  try{FLEET=JSON.parse(localStorage.getItem(LSF)||"null")}catch(e){FLEET=null}
+  if(!Array.isArray(FLEET)||!FLEET.length)FLEET=DEFAULT_FLEET.map(o=>Object.assign({},o));
+  if(!S){S=blankState()}
+  else S=blankState(S);
+}
+function save(){try{localStorage.setItem(LS,JSON.stringify(S));localStorage.setItem(LSF,JSON.stringify(FLEET))}catch(e){}}
+
+/* ---------- Utilitaires ---------- */
+const $=id=>document.getElementById(id);
+const num=v=>{const n=parseFloat(String(v).replace(",","."));return isFinite(n)?n:0};
+const numOrNull=v=>{if(v===""||v==null)return null;const n=parseFloat(String(v).replace(",","."));return isFinite(n)?n:null};
+const fr2=n=>n.toFixed(2).replace(".",",");
+const fdate=s=>{if(!s)return"";const[y,m,d]=s.split("-");return d+"/"+m+"/"+y};
+function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,3500)}
+const aircraft=()=>({reg:S.reg,type:TYPES[S.acType]?S.acType:"C150",ew:num(S.ew),arm:num(S.arm)});
+function rememberAc(){const reg=(S.reg||"").toUpperCase().trim();if(reg.length<4)return;let a=FLEET.find(x=>x.reg===reg);if(!a){a={reg};FLEET.push(a)}a.type=S.acType;a.ew=num(S.ew);a.arm=num(S.arm)}
+
+/* ---------- METAR ---------- */
+function parseMetar(raw){
+  const r={};let s=raw.toUpperCase().replace(/\s+/g," ").trim();
+  s=s.split(" RMK ")[0];
+  const t=s.split(" ").filter(x=>x&&x!=="METAR"&&x!=="SPECI"&&x!=="=");
+  let i=0;
+  if(/^[A-Z]{4}$/.test(t[i]||""))r.stn=t[i++];
+  if(/^\d{6}Z$/.test(t[i]||"")){r.time=t[i].slice(2,6)+"Z";r.day=t[i].slice(0,2);i++}
+  if(t[i]==="AUTO"||t[i]==="CCA"||t[i]==="COR")i++;
+  const sky=[];
+  for(;i<t.length;i++){
+    const x=t[i];let m;
+    if((m=x.match(/^(\d{3}|VRB)(\d{2,3})(?:G(\d{2,3}))?KT$/))){r.dir=m[1];r.spd=+m[2];r.gst=m[3]?+m[3]:null;continue}
+    if(/^\d{3}V\d{3}$/.test(x)){r.varb=x;continue}
+    if(/^\d$/.test(x)&&/^\d\/\dSM$/.test(t[i+1]||"")){sky.push(x+" "+t[i+1]);i++;continue}
+    if(/^(P|M)?\d+(\/\d+)?SM$/.test(x)){sky.push(x);continue}
+    if((m=x.match(/^(M?\d{2})\/(M?\d{2})?$/))){r.t=+m[1].replace("M","-");if(m[2])r.td=+m[2].replace("M","-");continue}
+    if((m=x.match(/^A(\d{4})$/))){r.alt=(+m[1]/100).toFixed(2);continue}
+    if((m=x.match(/^Q(\d{4})$/))){r.alt=(+m[1]/33.8639).toFixed(2);continue}
+    if(/^R\d{2}/.test(x))continue;
+    sky.push(x);
+  }
+  r.sky=sky.join(" ");
+  return r;
+}
+function applyMetar(notify){
+  if(!S.metar.trim())return;
+  const m=parseMetar(S.metar);
+  if(m.stn)S.wFrom=m.stn+" "+(m.day?m.day:"")+(m.time||"");
+  if(m.dir!=null){S.wDir=m.dir==="VRB"?"VRB":String(+m.dir);S.wSpd=String(m.spd);S.wGst=m.gst?String(m.gst):""}
+  S.wCld=m.sky||"";
+  if(m.t!=null)S.wT=String(m.t);
+  if(m.td!=null)S.wTd=String(m.td);
+  if(m.alt)S.wAlt=m.alt;
+  if(m.stn){S.wxStn=m.stn;if(ELEV[m.stn]!=null)S.elev=String(ELEV[m.stn])}
+  if(notify)toast("METAR décodé"+(m.time?" · émis à "+m.time:""));
+}
+function wxCalc(){
+  const out={};const elev=num(S.elev),alt=numOrNull(S.wAlt),T=numOrNull(S.wT);
+  if(alt!=null){out.pa=Math.round(elev+(29.92-alt)*1000);
+    if(T!=null){const isa=15-2*out.pa/1000;out.da=Math.round(out.pa+120*(T-isa))}}
+  const rwy=numOrNull(S.rwy),dir=numOrNull(S.wDir);
+  if(rwy!=null&&dir!=null&&S.wDir!=="VRB"){
+    const magWind=dir+num(S.decl); // vent METAR en vrai → magnétique (déclinaison W)
+    const ang=(magWind-rwy*10)*Math.PI/180;
+    const spd=Math.max(num(S.wSpd),num(S.wGst));
+    out.hw=Math.round(spd*Math.cos(ang));out.xw=Math.round(Math.abs(spd*Math.sin(ang)));
+    out.xwSide=Math.sin(ang)>=0?"droite":"gauche";out.spd=spd;out.rel=Math.abs(((magWind-rwy*10)%360+540)%360-180);
+  }
+  const lim=String(S.lims||"").split("/");out.hwLim=numOrNull(lim[0]);out.xwLim=numOrNull(lim[1]);
+  if(S.wT!==""&&S.wTd!==""){out.spread=num(S.wT)-num(S.wTd)}
+  return out;
+}
+
+/* ---------- Masse et centrage ---------- */
+function wbCalc(){
+  const ac=aircraft(),ty=TYPES[ac.type];
+  const gph=numOrNull(S.gph)!=null?num(S.gph):ty.gph;
+  const fuelW=num(S.fuelGal)*6;
+  let usedW;
+  if(S.usedOverride!=null&&S.usedOverride!==""&&(S.fTime===""||S.fTime==null))usedW=num(S.usedOverride);
+  else usedW=num(S.fTime)*gph*6;
+  const rows=[
+    ["Poids vide",ac.ew,ac.arm],["Siège avant gauche",num(S.wPil),ty.front],["Siège avant droit",num(S.wFr),ty.front],
+    [ty.b1Label,num(S.wB1),ty.b1],["Bagages zone 2",num(S.wB2),ty.b2]
+  ].map(r=>({l:r[0],w:r[1],a:r[2],m:r[1]*r[2]}));
+  const sum=a=>a.reduce((s,r)=>({w:s.w+r.w,m:s.m+r.m}),{w:0,m:0});
+  const z=sum(rows);const zfw={l:"Poids sans carburant",w:z.w,m:z.m,a:z.m/z.w,tot:true};
+  const fuel={l:"Carburant à bord",w:fuelW,a:ty.fuel,m:fuelW*ty.fuel};
+  const tow={l:"Poids décollage",w:zfw.w+fuel.w,m:zfw.m+fuel.m,tot:true};tow.a=tow.m/tow.w;
+  const used={l:"Carburant utilisé prévu",w:usedW,a:ty.fuel,m:usedW*ty.fuel};
+  const ldw={l:"Poids atterrissage",w:tow.w-used.w,m:tow.m-used.m,tot:true};ldw.a=ldw.m/ldw.w;
+  const all=[...rows,zfw,fuel,tow,used,ldw];
+  const check=p=>{const okW=p.w<=ty.mtow+1e-9;const okA=p.a>=ty.fwd(p.w)-1e-9&&p.a<=ty.aft(p.w)+1e-9;return okW&&okA};
+  const util=ty.utilMtow?(tow.w<=ty.utilMtow&&tow.a<=ty.utilAft&&tow.a>=ty.fwd(tow.w)):null;
+  const warn=[];
+  if(used.w>fuel.w)warn.push("Carburant utilisé > carburant à bord");
+  if(ac.type==="C150"&&num(S.wB1)+num(S.wB2)>120)warn.push("Bagages > 120 lb");
+  if(ac.type==="C172"&&num(S.wB2)>120)warn.push("Bagages > 120 lb");
+  return {ac,ty,gph,all,zfw,tow,ldw,used,fuel,okT:check(tow),okL:check(ldw),okZ:check(zfw),util,warn};
+}
+
+/* ---------- Opérations de dessin (communes aperçu SVG + PDF) ---------- */
+function ops(){
+  const P1=[],P2=[];const ink="#1b3b94";
+  const T=(arr,x,y,text,o={})=>{if(text===""||text==null)return;arr.push(Object.assign({k:"t",x,y,text:String(text),size:11,align:"l"},o))};
+  const L=(arr,x1,y1,x2,y2,o={})=>arr.push(Object.assign({k:"l",x1,y1,x2,y2,w:1.4},o));
+  const tick=(arr,cx,cy)=>{L(arr,cx-4,cy,cx-1,cy+4,{w:2.2});L(arr,cx-1,cy+4,cx+6,cy-6,{w:2.2})};
+  /* Page 1 */
+  T(P1,438,33,fdate(S.date),{size:13});T(P1,452,66,fdate(S.ret),{size:13});
+  T(P1,292,89,(S.reg||"").toUpperCase(),{size:13});
+  {const ins=(S.instructor||"").trim();if(ins){P1.push({k:"r",x:283,y:121.5,rw:189,rh:18.6,c:"#ffffff"});T(P1,293,135,ins,{size:12})}}T(P1,572,92,S.color,{size:10.5,align:"c",c:{GREEN:"#1a8a3c",BLUE:"#1b4fd1",YELLOW:"#c79400",RED:"#d0142c"}[S.color]||"#1b3b94"});
+  {const lm=String(S.lims||"").split("/");T(P1,553,113,(lm[0]||"").trim(),{size:11,align:"c"});T(P1,553,131,(lm[1]||"").trim(),{size:11,align:"c"})}
+  if(S.kDoc)tick(P1,52.8,482.4);if(S.kWx)tick(P1,52.8,504);if(S.kWb)tick(P1,52.8,525.6);
+  const circ={dual:[226.4,245.6],solo:[304,245.6],test:[376,244.8]}[S.ftype];if(circ)tick(P1,circ[0],circ[1]);
+  const box={cLocal:[43.2,266.4],cCirc:[276,265.6],cFirst:[342.4,265.6],cNav:[422.4,266.4],cIfr:[45.6,289.6],cOther:[117.6,289.6]};
+  for(const k in box)if(S[k])tick(P1,box[k][0],box[k][1]);
+  T(P1,136,270,S.zone,{size:10});T(P1,218,293,S.other,{size:10});
+  const py=[184,205.5,227];
+  S.pax.forEach((p,i)=>{T(P1,38,py[i],p[0],{size:9.5});T(P1,326,py[i],p[1],{size:9.5});T(P1,470,py[i],p[2],{size:9.5})});
+  const dy=[320.5,344.3,368.2,392.1,416];
+  S.dests.forEach((d,i)=>{T(P1,112,dy[i],(d[0]||"").toUpperCase());T(P1,382,dy[i],d[1])});
+  T(P1,303,440,S.ttime);T(P1,382,440,S.tEta);
+  if(S.kNav)tick(P1,52.8,548);if(S.kNavNA)tick(P1,268.8,548.8);
+  if(S.kFp)tick(P1,52.8,569.6);if(S.kFpNA)tick(P1,268.8,570.4);
+  T(P1,388,484,fdate(S.lastFlight));
+  T(P1,286,597,S.lesson);
+  /* Page 2 : tableau W&B */
+  const wb=wbCalc();const tops=[26.5,40.5,55,69.5,83.5,98,113,127,141.5,156];
+  wb.all.forEach((r,i)=>{const y=tops[i]+10.3;
+    T(P2,345.7,y,fr2(r.w),{size:9.5,align:"c",font:"n"});T(P2,438.5,y,fr2(r.a),{size:9.5,align:"c",font:"n"});T(P2,525,y,fr2(r.m),{size:9.5,align:"c",font:"n"})});
+  /* repères sur le graphique du type */
+  const ch=CHART[wb.ac.type];
+  [wb.tow,wb.ldw].forEach(p=>{const m=p.m/1000;const x=ch.X(m),y=ch.Y(p.w);
+    if(x<=ch.left||y>=ch.bottom||p.w>ch.wMax+40||m>ch.mMax)return;
+    L(P2,ch.left,y,x,y,{w:1.3,c:"#1f6fe0"});L(P2,x,y,x,ch.bottom,{w:1.3,c:"#1f6fe0"})});
+  /* Indice de givrage : croix T / Td */
+  {const t=numOrNull(S.wT),td=numOrNull(S.wTd);
+   if(t!=null&&td!=null&&t>=-20&&t<=30&&td>=-20&&td<=30){const x=118.25+t*3.86,y=659-td*3.725;
+     L(P2,x-5,y-5,x+5,y+5,{w:2.2,c:"#c0122a"});L(P2,x-5,y+5,x+5,y-5,{w:2.2,c:"#c0122a"})}}
+  /* Résultante de vent sur l'abaque */
+  {const wx=wxCalc();
+   if(wx.rel!=null&&wx.rel<=90&&wx.spd>0&&wx.spd<=45){const ox=327.75,oy=730.75,X=v=>ox+v*4.64,Y=v=>oy-v*3.995;
+     const xw=wx.spd*Math.sin(wx.rel*Math.PI/180),hw=wx.spd*Math.cos(wx.rel*Math.PI/180);
+     L(P2,X(0),Y(0),X(xw),Y(hw),{w:1.8,c:"#c0122a"});
+     L(P2,X(xw),Y(hw),X(0),Y(hw),{w:1.2,c:"#c0122a",dash:[3,2]});L(P2,X(xw),Y(hw),X(xw),Y(0),{w:1.2,c:"#c0122a",dash:[3,2]});
+     L(P2,X(xw)-3,Y(hw)-3,X(xw)+3,Y(hw)+3,{w:2,c:"#c0122a"});L(P2,X(xw)-3,Y(hw)+3,X(xw)+3,Y(hw)-3,{w:2,c:"#c0122a"})}}
+  /* Météo */
+  T(P2,122,397,S.wFrom,{size:10.5});
+  T(P2,138,419.5,S.wDir,{size:10.5,align:"c"});T(P2,189,419.5,S.wSpd,{size:10.5,align:"c"});T(P2,241,419.5,S.wGst,{size:10.5,align:"c"});
+  const cld=S.wCld||"";
+  if(cld.length>34){const cut=cld.lastIndexOf(" ",34);T(P2,108,437,cld.slice(0,cut),{size:8.5});T(P2,108,447.5,cld.slice(cut+1),{size:8.5})}
+  else T(P2,108,440,cld,{size:cld.length>24?8.5:10});
+  T(P2,148,462,S.wT,{size:10.5,align:"c"});T(P2,211,462,S.wTd,{size:10.5,align:"c"});
+  T(P2,122,483,S.wAlt,{size:10.5});T(P2,122,504,S.rwy,{size:10.5});T(P2,165,525,S.rwyCond,{size:10.5});
+  /* Performances */
+  const pr=(base,y)=>{T(P2,502,y[0],S[base+"TOr"],{size:10.5,align:"c"});T(P2,571,y[0],S[base+"TOt"],{size:10.5,align:"c"});
+    T(P2,502,y[1],S[base+"LDr"],{size:10.5,align:"c"});T(P2,571,y[1],S[base+"LDt"],{size:10.5,align:"c"});
+    T(P2,502,y[2],S[base+"Rng"],{size:10.5,align:"c"});T(P2,502,y[3],S[base+"End"],{size:10.5,align:"c"})};
+  pr("p1",[396.5,413.8,430.5,445.5]);pr("p2",[485.8,503.2,519.5,534.8]);
+  return [P1.map(o=>Object.assign({c:ink},o)),P2.map(o=>Object.assign({c:ink},o))];
+}
+
+/* ---------- Rendu SVG ---------- */
+const esc=s=>s.replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function drawSvg(svg,bgId,list){
+  if(!svg._bg){svg._bg='<image href="'+(bgId==="bg1"?"preview-1.jpg":"preview-2.jpg")+'" x="0" y="0" width="612" height="792"/>'}
+  let h=svg._bg;
+  for(const o of list){
+    if(o.k==="r"){h+=`<rect x="${o.x}" y="${o.y}" width="${o.rw}" height="${o.rh}" fill="${o.c}"/>`;continue}
+    if(o.k==="t")h+=`<text x="${o.x}" y="${o.y}" font-size="${o.size}" fill="${o.c}" font-family="Helvetica,Arial,sans-serif" font-weight="700" text-anchor="${o.align==="c"?"middle":"start"}">${esc(o.text)}</text>`;
+    else h+=`<line x1="${o.x1}" y1="${o.y1}" x2="${o.x2}" y2="${o.y2}" stroke="${o.c}" stroke-width="${o.w}" stroke-linecap="round"${o.dash?` stroke-dasharray="${o.dash.join(" ")}"`:""}/>`;
+  }
+  svg.innerHTML=h;
+}
+
+/* ---------- PDF ---------- */
+async function makePdf(){
+  if(!window.PDFLib)throw new Error("pdf-lib absent");
+  const {PDFDocument,StandardFonts,rgb}=PDFLib;
+  const bytes=await getTemplate();if(!bytes)throw new Error("importe d'abord ton modèle signé (section 00)");
+  const doc=await PDFDocument.load(bytes,{ignoreEncryption:true});
+  const font=await doc.embedFont(StandardFonts.HelveticaBold);
+  const pages=doc.getPages();const [o1,o2]=ops();
+  const col=h=>{const n=parseInt(h.slice(1),16);return rgb(((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255)};
+  [o1,o2].forEach((list,pi)=>{const pg=pages[pi];const H=pg.getHeight();
+    for(const o of list){
+      if(o.k==="r"){pg.drawRectangle({x:o.x,y:H-o.y-o.rh,width:o.rw,height:o.rh,color:col(o.c)});continue}
+      if(o.k==="t"){const txt=o.text.replace(/[^\x20-\xFF]/g,"");const w=font.widthOfTextAtSize(txt,o.size);
+        pg.drawText(txt,{x:o.align==="c"?o.x-w/2:o.x,y:H-o.y,size:o.size,font,color:col(o.c)})}
+      else pg.drawLine({start:{x:o.x1,y:H-o.y1},end:{x:o.x2,y:H-o.y2},thickness:o.w,color:col(o.c),lineCap:o.dash?0:1,dashArray:o.dash||undefined});
+    }});
+  return await doc.save();
+}
+window.__makePdf=makePdf;
+async function downloadPdf(){
+  const btn=$("btnPdf");btn.disabled=true;
+  try{
+    const bytes=await makePdf();
+    const ident=(S.reg||"").toUpperCase().trim().replace(/^C-/,"").replace(/[^A-Z0-9]/g,"")||"XXXX";
+    const name="FSS_OFIN_"+ident+".pdf";
+    const file=new File([bytes],name,{type:"application/pdf"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      try{await navigator.share({files:[file],title:name})}catch(e){if(e&&e.name==="AbortError")return;throw e}
+    }else{
+      const url=URL.createObjectURL(file);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+      toast("PDF créé : "+name);
+    }
+  }catch(e){toast("Échec de la création du PDF"+(e&&e.message?" : "+e.message:""))}
+  finally{btn.disabled=false}
+}
+
+/* ---------- Formulaire ---------- */
+function buildDynamic(){
+  $("dests").innerHTML=S.dests.map((d,i)=>`<div class="dest"><span>${i+1}</span><input id="d${i}" data-d="${i}" data-j="0" placeholder="Destination ${i+1}" style="text-transform:uppercase"><input id="e${i}" data-d="${i}" data-j="1" placeholder="ETA"></div>`).join("");
+  $("paxList").innerHTML=S.pax.map((p,i)=>`<div class="pax"><input id="pn${i}" data-p="${i}" data-j="0" placeholder="Passager ${i+1} : nom, prénom"><input id="pc${i}" data-p="${i}" data-j="1" placeholder="Contact d'urgence"><input id="pt${i}" data-p="${i}" data-j="2" placeholder="Téléphone"></div>`).join("");
+  renderFleet();
+}
+function renderFleet(){
+  $("fleetList").innerHTML=FLEET.filter(a=>!a.reg.includes("?")).map(a=>`<option value="${esc(a.reg)}">${a.type} · ${a.ew} lb · ${a.arm} in</option>`).join("");
+}
+function fillInputs(){
+  document.querySelectorAll("[data-k]").forEach(el=>{const k=el.dataset.k;
+    if(el.type==="checkbox")el.checked=!!S[k];else if(el.type==="radio")el.checked=S[k]===el.value;else if(document.activeElement!==el)el.value=S[k]??""});
+  document.querySelectorAll("[data-d]").forEach(el=>{if(document.activeElement!==el)el.value=S.dests[el.dataset.d][el.dataset.j]});
+  document.querySelectorAll("[data-p]").forEach(el=>{if(document.activeElement!==el)el.value=S.pax[el.dataset.p][el.dataset.j]});
+  const ty=TYPES[aircraft().type];$("gph").placeholder=String(ty.gph);
+  $("lbB1").firstChild.textContent=(aircraft().type==="C172"?"Pax arrière":"Bagages zone 1 / pax arrière")+" (lb)";
+}
+function render(){
+  const wb=wbCalc();
+  $("wbTable").innerHTML="<tr><th></th><th>Poids (lb)</th><th>Bras (in)</th><th>Moment</th></tr>"+wb.all.map(r=>`<tr class="${r.tot?"tot":""}"><td>${r.l}</td><td>${fr2(r.w)}</td><td>${fr2(r.a)}</td><td>${fr2(r.m)}</td></tr>`).join("");
+  const pill=(ok,txt)=>`<span class="pill ${ok?"ok":"bad"}">${txt}</span>`;
+  let p=pill(wb.okT,"Décollage "+(wb.okT?"dans l'enveloppe":"HORS limites"))+pill(wb.okL,"Atterrissage "+(wb.okL?"dans l'enveloppe":"HORS limites"));
+  p+=`<span class="pill neu">Marge MTOW ${Math.round(wb.ty.mtow-wb.tow.w)} lb</span>`;
+  if(wb.util!==null)p+=`<span class="pill ${wb.util?"ok":"warn"}">${wb.util?"Catégorie utilitaire OK":"Hors catégorie utilitaire"}</span>`;
+  wb.warn.forEach(w=>p+=`<span class="pill warn">${w}</span>`);
+  $("wbPills").innerHTML=p;
+  drawEnv(wb);
+  const w=wxCalc();const cell=(lbl,val,cls)=>`<div class="${cls||""}"><small>${lbl}</small><strong>${val}</strong></div>`;
+  let c="";
+  c+=cell("Altitude-pression",w.pa!=null?w.pa+" ft":"—");
+  c+=cell("Altitude-densité",w.da!=null?w.da+" ft":"—");
+  if(w.hw!=null){c+=cell("Vent de face",(w.hw<0?"arrière ":"")+Math.abs(w.hw)+" kt",w.hw<0?"warn":(w.hwLim!=null&&w.hw>w.hwLim?"bad":"ok"));
+    c+=cell("Travers ("+w.xwSide+")",w.xw+" kt",w.xwLim!=null&&w.xw>w.xwLim?"bad":"ok")}
+  else c+=cell("Composantes vent","piste ?");
+  if(w.hw!=null)c+=cell("Vent magnétique",(((num(S.wDir)+num(S.decl))%360+360)%360).toFixed(0).padStart(3,"0")+"° / "+w.spd+" kt",w.rel>90?"warn":"");
+  if(w.spread!=null)c+=cell("Écart T/Td",w.spread+" °C",w.spread<=3?"warn":"");
+  $("wxCalc").innerHTML=c;
+  const st=(S.wxStn||"CYND").toUpperCase();
+  $("wxLinks").innerHTML=`Ouvrir le METAR de ${esc(st)} : <a href="https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(st)}&hours=2" target="_blank" rel="noopener">aviationweather.gov</a> · <a href="https://plan.navcanada.ca/wxrecall/" target="_blank" rel="noopener">NAV CANADA</a>. Copie la ligne, colle-la ci-dessus : tout se remplit.`;
+  $("color").dataset.c=S.color||"";
+  const [o1,o2]=ops();drawSvg($("pg1"),"bg1",o1);drawSvg($("pg2"),"bg2",o2);
+}
+function drawEnv(wb){
+  const ty=wb.ty;const W=520,H=260,pad={l:46,r:12,t:12,b:34};
+  const pts=[...ty.env,[wb.zfw.w,wb.zfw.m/1000],[wb.tow.w,wb.tow.m/1000],[wb.ldw.w,wb.ldw.m/1000]];
+  const mMin=Math.floor(Math.min(...pts.map(p=>p[1]))/5)*5-2,mMax=Math.ceil(Math.max(...pts.map(p=>p[1]))/5)*5+2;
+  const wMin=Math.floor(Math.min(...pts.map(p=>p[0]))/100)*100-50,wMax=Math.ceil(Math.max(...pts.map(p=>p[0]))/100)*100+50;
+  const X=m=>pad.l+(m-mMin)/(mMax-mMin)*(W-pad.l-pad.r),Y=w=>H-pad.b-(w-wMin)/(wMax-wMin)*(H-pad.t-pad.b);
+  let s="";
+  for(let m=Math.ceil(mMin/5)*5;m<=mMax;m+=5)s+=`<line x1="${X(m)}" x2="${X(m)}" y1="${pad.t}" y2="${H-pad.b}" stroke="var(--line)"/><text x="${X(m)}" y="${H-pad.b+15}" font-size="11" text-anchor="middle" fill="var(--muted)" font-family="JetBrains Mono,monospace">${m}</text>`;
+  for(let w=Math.ceil(wMin/100)*100;w<=wMax;w+=100)s+=`<line x1="${pad.l}" x2="${W-pad.r}" y1="${Y(w)}" y2="${Y(w)}" stroke="var(--line)"/><text x="${pad.l-6}" y="${Y(w)+4}" font-size="11" text-anchor="end" fill="var(--muted)" font-family="JetBrains Mono,monospace">${w}</text>`;
+  s+=`<polygon points="${ty.env.map(p=>X(p[1])+","+Y(p[0])).join(" ")}" fill="var(--ok-soft)" stroke="var(--ok)" stroke-width="1.5"/>`;
+  if(ty.utilMtow)s+=`<polyline points="${X(ty.utilAft*1500/1000)},${Y(1500)} ${X(ty.utilAft*2000/1000)},${Y(2000)} ${X(ty.fwd(2000)*2000/1000)},${Y(2000)}" fill="none" stroke="var(--ok)" stroke-dasharray="4 3"/>`;
+  s+=`<text x="${W/2}" y="${H-4}" font-size="11" text-anchor="middle" fill="var(--muted)">Moment / 1000 (lb-in)</text>`;
+  const P=[["ZFW",wb.zfw,"var(--muted)"],["TOW",wb.tow,wb.okT?"var(--accent)":"var(--bad)"],["LDW",wb.ldw,wb.okL?"var(--accent)":"var(--bad)"]];
+  s+=`<polyline points="${P.map(p=>X(p[1].m/1000)+","+Y(p[1].w)).join(" ")}" fill="none" stroke="var(--accent)" stroke-dasharray="3 3"/>`;
+  P.forEach(([n,p,c])=>{s+=`<circle cx="${X(p.m/1000)}" cy="${Y(p.w)}" r="4.5" fill="${c}"/><text x="${X(p.m/1000)+8}" y="${Y(p.w)+4}" font-size="11.5" font-weight="600" fill="${c}" font-family="JetBrains Mono,monospace">${n}</text>`});
+  $("envSvg").innerHTML=s;
+}
+
+/* ---------- Événements ---------- */
+document.addEventListener("input",e=>{
+  const el=e.target;
+  if(el.dataset.k){const k=el.dataset.k;S[k]=el.type==="checkbox"?el.checked:el.value;
+    if(k==="fTime"||k==="fuelGal")S.usedOverride="";
+    if(k==="metar")applyMetar(true);
+    if(k==="wxStn"){const st=el.value.toUpperCase();if(ELEV[st]!=null)S.elev=String(ELEV[st])}
+    if(k==="cNav"&&el.checked){S.kNav=true;S.kNavNA=false}
+    if(k==="reg"){const a=FLEET.find(x=>x.reg===el.value.toUpperCase().trim());if(a){S.acType=a.type;S.ew=String(a.ew);S.arm=String(a.arm)}}
+    if(k==="ew"||k==="arm"||k==="acType"){rememberAc();renderFleet()}
+    fillInputs();}
+  else if(el.dataset.d!=null)S.dests[el.dataset.d][el.dataset.j]=el.value;
+  else if(el.dataset.p!=null)S.pax[el.dataset.p][el.dataset.j]=el.value;
+  else return;
+  S._sample=false;save();render();
+});
+$("btnPdf").addEventListener("click",downloadPdf);
+let armedReset=false;
+$("btnNew").addEventListener("click",()=>{
+  const b=$("btnNew");
+  if(!armedReset){armedReset=true;b.textContent="Confirmer : tout effacer ?";setTimeout(()=>{armedReset=false;b.textContent="Nouveau vol"},4000);return}
+  armedReset=false;b.textContent="Nouveau vol";
+  S=blankState({reg:S.reg,acType:S.acType,ew:S.ew,arm:S.arm,color:S.color,instructor:S.instructor,wPil:S.wPil,lims:S.lims,decl:S.decl,lastFlight:S.date,wxStn:S.wxStn,elev:S.elev});
+  save();buildDynamic();fillInputs();render();toast("Nouvelle feuille prête");
+});
+
+let INSTR=[];
+try{const x=JSON.parse(localStorage.getItem("ffs-instr-v1")||"null");if(Array.isArray(x)&&x.length)INSTR=x}catch(e){}
+function renderInstr(){$("instrList").innerHTML=INSTR.map(n=>`<option value="${esc(n)}"></option>`).join("")}
+$("instructor").addEventListener("change",()=>{const n=(S.instructor||"").trim();if(n&&!INSTR.includes(n)){INSTR.push(n);try{localStorage.setItem("ffs-instr-v1",JSON.stringify(INSTR))}catch(e){}renderInstr()}});
+/* ---------- Modèle signé (IndexedDB, local à l'appareil) ---------- */
+function idb(){return new Promise((res,rej)=>{const q=indexedDB.open("fss-generator",1);q.onupgradeneeded=()=>q.result.createObjectStore("files");q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error)})}
+async function getTemplate(){try{const db=await idb();return await new Promise((res,rej)=>{const t=db.transaction("files").objectStore("files").get("template");t.onsuccess=()=>res(t.result?new Uint8Array(t.result):null);t.onerror=()=>rej(t.error)})}catch(e){return null}}
+async function putTemplate(buf){const db=await idb();return new Promise((res,rej)=>{const tx=db.transaction("files","readwrite");tx.objectStore("files").put(buf,"template");tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}
+async function refreshTpl(){const b=await getTemplate();const ok=!!b;$("tplCard").classList.toggle("ok",ok);
+  $("tplMsg").textContent=ok?"Modèle signé enregistré sur cet appareil ("+Math.round(b.length/1024)+" Ko). Tu peux le remplacer à tout moment.":"Importe ton formulaire vierge signé (PDF). Il reste sur cet appareil et n'est jamais envoyé en ligne.";
+  $("tplBtn").textContent=ok?"Remplacer le modèle":"Importer le modèle"}
+$("tplFile").addEventListener("change",async e=>{const f=e.target.files&&e.target.files[0];if(!f)return;
+  try{const buf=await f.arrayBuffer();const doc=await PDFLib.PDFDocument.load(buf,{ignoreEncryption:true});
+    if(doc.getPageCount()<2)throw new Error("le PDF doit avoir 2 pages");
+    await putTemplate(buf);await refreshTpl();toast("Modèle enregistré")}
+  catch(err){toast("Ce fichier ne convient pas : "+(err.message||err))}
+  e.target.value=""});
+load();buildDynamic();fillInputs();render();renderInstr();refreshTpl();
+if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});
+
+</script>
+
+</body>
+</html>
