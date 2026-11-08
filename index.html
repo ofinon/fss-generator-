@@ -95,6 +95,7 @@ details.fleet summary{cursor:pointer;font-weight:600;font-size:13.5px;color:var(
 #color[data-c="RED"]{color:var(--bad);border-color:var(--bad);background:var(--bad-soft)}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .logo{width:48px;height:48px;flex-shrink:0;filter:drop-shadow(0 2px 4px rgba(20,32,48,.25))}
+input[readonly]{background:var(--accent-soft);color:var(--accent);font-weight:600}
 @media (prefers-reduced-motion:no-preference){.chip,button{transition:background .12s,border-color .12s}}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);font-size:15px}
@@ -260,7 +261,14 @@ body{margin:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-a
 
 <section class="card">
   <h2><span class="n">05</span>Performances</h2>
-  <p class="hint">Saisie manuelle pour l'instant. Le calcul automatique viendra de ton Excel de performances.</p>
+  <div class="row">
+    <label class="f">Calcul 1re étape<select id="perfAuto" data-k="perfAuto"><option value="auto">Auto (POH C150M)</option><option value="man">Saisie manuelle</option></select></label>
+    <label class="f">Surface de piste<select id="surf" data-k="surf"><option>Revêtue</option><option>Herbe sèche</option></select></label>
+    <label class="f">Marge de sécurité (%)<input id="marg" data-k="marg" class="num" inputmode="decimal"></label>
+  </div>
+  <div class="calc" id="perfCalc"></div>
+  <div class="pills" id="perfAlerts"></div>
+  <p class="hint">Calcul de la 1re étape avec la météo et la piste de la section 03 (vent moyen, sans rafales). Rayon d'action, autonomie et 2e étape restent en saisie.</p>
   <p class="sub">1re étape</p>
   <div class="row">
     <label class="f">Décollage roulage (ft)<input id="p1TOr" data-k="p1TOr" class="num"></label>
@@ -324,7 +332,7 @@ const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth
 function blankState(keep){
   return Object.assign({date:today(),ret:today(),reg:"C-GUDB",acType:"C150",ew:"1138.85",arm:"32.33",color:"",instructor:"",kDoc:true,kWx:true,kWb:true,ftype:"solo",cLocal:false,cCirc:false,cFirst:false,cNav:false,cIfr:false,cOther:false,
     zone:"",other:"",lesson:"",lastFlight:"",dests:[["",""],["",""],["",""],["",""],["",""]],ttime:"",tEta:"",kNav:false,kNavNA:false,kFp:false,kFpNA:true,
-    pax:[["","",""],["","",""],["","",""]],wxStn:"CYND",elev:"211",decl:"10",metar:"",wFrom:"",wDir:"",wSpd:"",wGst:"",wCld:"",wT:"",wTd:"",wAlt:"",rwy:"",rwyCond:"DRY",lims:"25/13",
+    pax:[["","",""],["","",""],["","",""]],wxStn:"CYND",elev:"211",decl:"10",metar:"",wFrom:"",wDir:"",wSpd:"",wGst:"",wCld:"",wT:"",wTd:"",wAlt:"",rwy:"",rwyCond:"DRY",lims:"25/13",perfAuto:"auto",surf:"Revêtue",marg:"0",
     wPil:"165",wFr:"0",wB1:"0",wB2:"10",fuelGal:"22.5",fTime:"1.5",gph:"",
     p1TOr:"",p1TOt:"",p1LDr:"",p1LDt:"",p1Rng:"",p1End:"",p2TOr:"",p2TOt:"",p2LDr:"",p2LDt:"",p2Rng:"",p2End:""},keep||{});
 }
@@ -406,6 +414,45 @@ function wxCalc(){
   if(S.wT!==""&&S.wTd!==""){out.spread=num(S.wT)-num(S.wTd)}
   return out;
 }
+
+/* ---------- Performances C150M (tables POH, même méthode que l'Excel) ---------- */
+const POH150={
+ to:[[655,710,765,820,880],[720,775,835,900,970],[790,855,920,990,1065],[870,935,1010,1090,1170],[955,1030,1115,1200,1290],[1050,1140,1230,1325,1430],[1160,1255,1360,1465,1580],[1285,1390,1505,1625,null],[1420,1540,1670,null,null]],
+ to50:[[1245,1335,1435,1540,1650],[1365,1465,1575,1690,1815],[1500,1615,1735,1865,2005],[1650,1780,1915,2065,2225],[1820,1965,2125,2290,2475],[2015,2185,2360,2555,2770],[2245,2435,2640,2870,3120],[2510,2730,2970,3240,null],[2820,3080,3370,null,null]],
+ ld:[[425,440,455,470,485],[440,455,470,485,505],[455,470,490,505,520],[470,490,505,525,540],[490,505,525,545,560],[510,525,545,565,585],[530,545,565,585,605],[550,570,590,610,630],[570,590,610,630,655]],
+ ld50:[[1045,1065,1090,1110,1135],[1065,1090,1110,1135,1165],[1090,1115,1140,1165,1185],[1115,1140,1165,1195,1215],[1140,1165,1195,1225,1245],[1170,1195,1225,1255,1285],[1200,1225,1255,1285,1315],[1230,1260,1290,1320,1350],[1260,1290,1320,1350,1385]]
+};
+function interpPOH(tab,pa,t){
+  const A=Math.max(0,pa),T=Math.max(0,t);const i=Math.min(Math.floor(A/1000),7),j=Math.min(Math.floor(T/10),3);
+  const fa=(A-i*1000)/1000,ft=(T-j*10)/10;
+  const g=(r,c)=>tab[r]&&tab[r][c]!=null?tab[r][c]:null;
+  const v00=g(i,j),v01=g(i,j+1),v10=g(i+1,j),v11=g(i+1,j+1);
+  if([[v00,(1-fa)*(1-ft)],[v01,(1-fa)*ft],[v10,fa*(1-ft)],[v11,fa*ft]].some(([v,w])=>w>0&&v==null))return null;
+  const z=v=>v==null?0:v;const lo=z(v00)+(z(v10)-z(v00))*fa,hi=z(v01)+(z(v11)-z(v01))*fa;
+  return Math.round(lo+(hi-lo)*ft);
+}
+function perfCalc(){
+  const r={alerts:[]};const w=wxCalc();const t=numOrNull(S.wT);
+  if(w.pa==null||t==null){r.missing=true;return r}
+  r.pa=w.pa;r.t=t;
+  if(w.pa>8000||t>40){r.alerts.push(["bad","PA > 8000 ft ou OAT > 40 °C : hors des tables POH"]);r.out=true}
+  if(t<0)r.alerts.push(["neu","OAT < 0 °C : valeurs à 0 °C (conservateur)"]);
+  if(w.pa<0)r.alerts.push(["neu","PA négative : valeurs niveau de la mer (conservateur)"]);
+  let hw=0;const rwy=numOrNull(S.rwy),dir=numOrNull(S.wDir);
+  if(rwy!=null&&dir!=null&&S.wDir!=="VRB")hw=num(S.wSpd)*Math.cos((dir+num(S.decl)-rwy*10)*Math.PI/180);
+  if(rwy==null)r.alerts.push(["warn","Piste non renseignée : vent ignoré"]);
+  r.hw=Math.round(hw*10)/10;const f=hw>=0?1-0.1*hw/9:1+0.1*(-hw)/2;r.f=f;
+  if(-hw>10)r.alerts.push(["bad","Vent arrière de "+(-r.hw)+" kt : au-delà des 10 kt couverts par le POH"]);
+  else if(hw<0)r.alerts.push(["warn","Vent arrière de "+(-r.hw)+" kt : distances augmentées"]);
+  const grass=S.surf==="Herbe sèche",m=1+num(S.marg)/100;
+  const raw={to:interpPOH(POH150.to,w.pa,t),to50:interpPOH(POH150.to50,w.pa,t),ld:interpPOH(POH150.ld,w.pa,t),ld50:interpPOH(POH150.ld50,w.pa,t)};
+  if(r.out)for(const k in raw)raw[k]=null;
+  else if(raw.to==null||raw.to50==null)r.alerts.push(["bad","Décollage : valeur non publiée au POH (montée < 150 ft/min)"]);
+  const c=(v,base,pct)=>v==null?null:Math.ceil(((v*f+(grass&&base!=null?pct*base*f:0))*m)/10-1e-9)*10;
+  r.raw=raw;r.to=c(raw.to,raw.to,.15);r.to50=c(raw.to50,raw.to,.15);r.ld=c(raw.ld,raw.ld,.45);r.ld50=c(raw.ld50,raw.ld,.45);
+  return r;
+}
+window.__perfCalc=perfCalc;
 
 /* ---------- Masse et centrage ---------- */
 function wbCalc(){
@@ -585,6 +632,18 @@ function render(){
   const st=(S.wxStn||"CYND").toUpperCase();
   $("wxLinks").innerHTML=`Ouvrir le METAR de ${esc(st)} : <a href="https://aviationweather.gov/api/data/metar?ids=${encodeURIComponent(st)}&hours=2" target="_blank" rel="noopener">aviationweather.gov</a> · <a href="https://plan.navcanada.ca/wxrecall/" target="_blank" rel="noopener">NAV CANADA</a>. Copie la ligne, colle-la ci-dessus : tout se remplit.`;
   $("color").dataset.c=S.color||"";
+  {const isC150=aircraft().type==="C150";const auto=S.perfAuto!=="man"&&isC150;const PK=["p1TOr","p1TOt","p1LDr","p1LDt"];
+   PK.forEach(k=>{$(k).readOnly=auto});let pc="",pl="";
+   if(auto){const p=perfCalc();
+     if(p.missing)pc=`<div><small>Calcul auto</small><strong>Colle un METAR (température, baro)</strong></div>`;
+     else{const sv=v=>v!=null?String(v):"";S.p1TOr=sv(p.to);S.p1TOt=sv(p.to50);S.p1LDr=sv(p.ld);S.p1LDt=sv(p.ld50);
+       PK.forEach(k=>{$(k).value=S[k]});
+       const cl=(l,v)=>`<div><small>${l}</small><strong>${v}</strong></div>`,d=v=>v==null?"—":v;
+       pc=cl("PA / OAT",p.pa+" ft / "+p.t+" °C")+cl("Vent de face moyen",p.hw+" kt")+cl("Facteur vent","× "+p.f.toFixed(3))
+         +cl("POH brut décollage",d(p.raw.to)+" / "+d(p.raw.to50)+" ft")+cl("POH brut atterrissage",d(p.raw.ld)+" / "+d(p.raw.ld50)+" ft");
+       pl=p.alerts.map(a=>`<span class="pill ${a[0]}">${a[1]}</span>`).join("")+`<span class="pill neu">POH à 1600 lb · déco volets 0° · atter. volets 40°</span>`}}
+   else if(!isC150&&S.perfAuto!=="man")pl=`<span class="pill warn">Pas de tables C172 dans le calculateur : saisie manuelle</span>`;
+   $("perfCalc").innerHTML=pc;$("perfAlerts").innerHTML=pl;}
   const [o1,o2]=ops();drawSvg($("pg1"),"bg1",o1);drawSvg($("pg2"),"bg2",o2);
 }
 function drawEnv(wb){

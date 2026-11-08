@@ -1,6 +1,6 @@
 // FSS Generator : garde l'app disponible hors ligne.
 // Change VERSION à chaque mise à jour des fichiers pour que l'iPad prenne la nouvelle version.
-const VERSION = "fss-v1";
+const VERSION = "fss-v2";
 const FILES = ["./", "index.html", "pdf-lib.min.js", "preview-1.jpg", "preview-2.jpg",
   "manifest.webmanifest", "icon-180.png", "icon-192.png", "icon-512.png"];
 self.addEventListener("install", e => {
